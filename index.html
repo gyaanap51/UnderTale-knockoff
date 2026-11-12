@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hollow Orbit: A Deep Space Puzzle RPG</title>
+<style>
+:root{--bg:#05060f;--fg:#eef;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:monospace;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+canvas{width:100%;max-width:640px;height:auto;background:#0a0d22;border:3px solid #3a4aa0;margin-top:8px;image-rendering:pixelated}
+#pad{display:flex;gap:6px;margin:10px;flex-wrap:wrap;justify-content:center}
+#pad button{font:inherit;font-size:20px;width:58px;height:50px;border-radius:10px;border:2px solid #3a4aa0;background:#141c4a;color:var(--fg);touch-action:none}
+p{max-width:620px;font-size:13px;opacity:.7;margin:4px 10px;text-align:center}
+</style></head><body>
+<canvas id="c" width="640" height="400" aria-label="Hollow Orbit game"></canvas>
+<div id="pad"><button data-k="ArrowLeft">◀</button><button data-k="ArrowUp">▲</button><button data-k="ArrowDown">▼</button><button data-k="ArrowRight">▶</button><button data-k="z">OK</button><button data-k="x">BACK</button></div>
+<p>Arrows/WASD move · Z or Enter = OK · X = Back · Rated E · No combat · 3 chapters</p>
+<script>
+"use strict";
+const C=document.getElementById("c"),X=C.getContext("2d"),W=640,H=400;
+const bx=220,by=165,bw=200,bh=160;
+const K={},hit={};
+addEventListener("keydown",e=>{if(!K[e.key])hit[e.key]=1;K[e.key]=1;if(e.key.startsWith("Arrow")||e.key===" ")e.preventDefault()});
+addEventListener("keyup",e=>K[e.key]=0);
+document.querySelectorAll("#pad button").forEach(b=>{const k=b.dataset.k;
+ b.onpointerdown=e=>{e.preventDefault();if(!K[k])hit[k]=1;K[k]=1};
+ b.onpointerup=b.onpointerleave=b.onpointercancel=()=>K[k]=0});
+const press=k=>hit[k]?(hit[k]=0,1):0;
+const OK=()=>press("z")||press("Enter")||press(" "),BACK=()=>press("x")||press("Escape");
+let ac;function beep(f,d=.1,ty="sine"){try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),g=ac.createGain();o.type=ty;o.frequency.value=f;g.gain.value=.04;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+d)}catch(e){}}
+
+const ACTS=[{n:"Scan",k:"scan"},{n:"Hum a tune",k:"hum"},{n:"Dim the lights",k:"dim"},{n:"Share a snack",k:"snack"},{n:"Sit quietly",k:"sit"},{n:"Wave hello",k:"wave"}];
+const PAT={
+ g:{ev:.35,f:()=>({x:bx+10+Math.random()*(bw-20),y:by,vx:0,vy:110,r:6})},
+ o:{ev:.5,f:()=>{const l=Math.random()<.5;return{x:l?bx:bx+bw,y:by+10+Math.random()*(bh-20),vx:l?95:-95,vy:0,r:7}}},
+ z:{ev:.8,f:()=>({x:bx+20+Math.random()*(bw-40),y:by+20,vx:(Math.random()<.5?-1:1)*70,vy:70,r:7,b:1})}};
+PAT.m={ev:.4,f:()=>Math.random()<.5?PAT.g.f():PAT.o.f()};
+const CH=[
+{n:"Docking Bay",c:"#0a0d22",term:null,mons:[
+ {n:"Glim",x:170,y:110,col:"#7df",need:["hum"],pat:"g",step:0,intro:"A glowing space-jelly drifts in your way.",
+  scan:["GLIM: a small glowing jelly. It seems LONELY.","It drifts toward sound and away from silence.","Its lights pulse to faint noises. Maybe make a sound?"],
+  r:{hum:"You hum a soft tune. Glim hums back and glows warm!",dim:"The lights dim. Glim shivers in the dark.",snack:"Glim sniffs the snack, but isn't hungry."},
+  end:"Glim bobs happily and floats off to find its friends."},
+ {n:"Orbi",x:330,y:290,col:"#fa7",need:["dim"],pat:"o",step:0,intro:"A round, shy blob squints at you.",
+  scan:["ORBI: a round shy blob. The bright lights seem to hurt its eyes.","It squints and hides behind its own arms.","It might relax in a softer glow."],
+  r:{dim:"The lights fade to a soft glow. Orbi relaxes!",hum:"Your humming makes Orbi flinch.",snack:"Orbi is too nervous to eat."},
+  end:"Orbi blinks slowly, gives a tiny bow, and rolls into a cozy shadow."},
+ {n:"Zork",x:490,y:130,col:"#c9f",need:["snack"],pat:"z",step:0,intro:"A grumpy rock-crab clicks its claws.",
+  scan:["ZORK: a grumpy rock-crab. Its belly rumbles loudly.","It keeps eyeing your snack pouch.","Grumpy creatures are often just hungry."],
+  r:{snack:"Zork munches happily. Its claws relax!",hum:"Zork grumbles even louder.",dim:"Zork stubs a claw in the dark. Grumble."},
+  end:"Zork pats your boot with a claw and scuttles off, full and smiling."}]},
+{n:"Greenhouse Ring",c:"#0a1f1a",mons:[
+ {n:"Fizz",x:200,y:140,col:"#ff9",need:["sit"],pat:"o",step:0,intro:"A jittery spark zips around your head.",
+  scan:["FIZZ: a jittery spark. Noise and motion overwhelm it.","It trembles at every sound.","Calm, quiet company might help."],
+  r:{sit:"You sit quietly. Fizz's sparks slow down and glow softly.",hum:"Fizz zaps in a panic!",dim:"Fizz spins in confusion."},
+  end:"Fizz settles on your shoulder for a moment, then drifts off, humming softly."},
+ {n:"Mossa",x:450,y:290,col:"#8e8",need:["wave"],pat:"g",step:0,intro:"A leafy creature droops sadly among the vines.",
+  scan:["MOSSA: a leafy creature drooping sadly.","Nobody has greeted it in a very long time.","A friendly hello might lift its leaves."],
+  r:{wave:"You wave. Mossa perks up and waves a leaf back!",hum:"Mossa droops. It wanted a hello, not a song.",snack:"Mossa isn't hungry. It's lonely."},
+  end:"Mossa's leaves bloom with tiny flowers. It waves goodbye for a long time."}],
+ term:{x:330,y:200,q:"Greenhouse door lock: 3, 6, 12, 24, ... what number comes next?",h:"each number doubles",o:["30","36","48"],a:2}},
+{n:"Reactor Core",c:"#220d12",mons:[
+ {n:"Nova",x:420,y:150,col:"#fd6",need:["sit","hum"],seq:1,pat:"m",step:0,intro:"A blazing star-spirit fills the core with warm light.",
+  scan:["NOVA: a blazing star-spirit. It feels huge and very alone.","It needs calm company first, then a song to remember.","Quiet first. Then music."],
+  r:{sit:"You sit beside Nova. Its flames settle.",hum:"You hum softly. Nova's glow turns warm gold!"},
+  end:"Nova's light softens and the reactor steadies. The whole station breathes again."}],
+ term:{x:200,y:290,q:"Reactor panel: exactly ONE statement is true. RED: \"Blue is the correct switch.\" BLUE: \"Red is wrong.\" GREEN: \"I am the correct switch.\" Which is correct?",h:"assume each is correct and count the true statements",o:["Red","Blue","Green"],a:1}}];
+const DLG=[
+ ()=>say(["ORI (station AI): \"Visitor... the pumps are jammed. The creatures here are scared, not mean.\""],()=>pick(["I'll help them. I promise.","What happened here?","I'm just passing through."],i=>{
+  if(i==0){kind++;snacks++;say(["ORI: \"Thank you. Take this snack.\" (+1 snack)"],()=>mode="walk")}
+  else if(i==1)say(["ORI: \"A solar storm threw them off course. They hid in my corridors.\""],()=>{xp+=5;mode="walk"})
+  else say(["ORI: \"I see. Good luck.\""],()=>mode="walk")},null,"Reply:")),
+ ()=>say(["ORI: \"The Greenhouse Ring is overgrown. Some plants are lonely, some are loud.\""],()=>pick(["Listen to each one","Hurry through"],i=>{
+  if(i==0){kind++;say(["ORI: \"A good listener. The station is lucky.\""],()=>mode="walk")}
+  else say(["ORI: \"Quick, but be careful.\""],()=>mode="walk")},null,"Reply:")),
+ ()=>say(["ORI: \"Reactor Core. Nova keeps the station alive, and it is frightened.\""],()=>pick(["I'll be gentle.","Can Nova hurt me?"],i=>{
+  if(i==0){kind++;say(["ORI: \"Thank you.\""],()=>mode="walk")}
+  else say(["ORI: \"Its flames can sting, but it never means to.\""],()=>{xp+=5;mode="walk"})},null,"Reply:"))];
+
+let MON,TERM,ch,hp,mhp,lv,xp,pts,snacks,ST,kind,cur,calm,sc,t,inv,sp,hz,mode,L,q,after,prev,P,PS,flash=0;
+function loadCh(){MON=JSON.parse(JSON.stringify(CH[ch].mons));TERM=CH[ch].term?Object.assign({done:0},CH[ch].term):null;P={x:60,y:320};hp=mhp}
+function reset(){ch=0;hp=mhp=20;lv=1;xp=0;pts=0;snacks=3;ST={EMP:2,LOG:2,TEC:2};kind=0;cur=null;calm=0;inv=0;hz=[];L=null;q=[];after=null;PS={x:bx+bw/2,y:by+bh/2};loadCh();mode="title"}
+reset();
+
+function say(lines,cb){q=[].concat(lines);after=cb||null;prev=mode;mode="text"}
+function pick(items,cb,back,prompt){mode="menu";L={items,i:0,cb,back,prompt}}
+function mainMenu(){pick(["ACT","ITEM","MERCY"],i=>[actMenu,itemMenu,mercy][i]())}
+function actMenu(){pick(ACTS.map(a=>a.n),i=>doAct(ACTS[i]),mainMenu)}
+function itemMenu(){pick(["Eat a snack (x"+snacks+")"],()=>{if(snacks<1)return say(["No snacks left."],mainMenu);snacks--;hp=Math.min(mhp,hp+10);beep(700);say(["You eat a snack. Hull +10."],dodge)},mainMenu)}
+function mercy(){pick(["Release kindly","Back"],i=>{if(i==1)return mainMenu();if(calm>=100)return win();say([cur.n+" isn't ready to go yet."],dodge)},mainMenu)}
+function startEnc(m){cur=m;calm=0;sc=0;say(["! "+m.n+" blocks the way !",m.intro],mainMenu)}
+function doAct(a){
+ if(a.k=="scan"){sc++;return say([cur.scan[Math.min(sc-1+(ST.LOG>=3?1:0),2)]],dodge)}
+ if(a.k=="snack"){if(snacks<1)return say(["No snacks left."],mainMenu);snacks--}
+ const ok=cur.seq?a.k==cur.need[cur.step]:cur.need.includes(a.k);
+ const txt=ok?cur.r[a.k]:(cur.seq&&cur.need.includes(a.k)?cur.n+" flares uneasily. Maybe a different order?":cur.r[a.k]||(a.k=="wave"?"You wave. "+cur.n+" tilts its head, curious.":cur.n+" doesn't react."));
+ if(ok){calm=Math.min(100,calm+(cur.seq?50:30+10*ST.EMP));if(cur.seq)cur.step++;beep(880)}else beep(180,.2,"square");
+ say([txt],calm>=100?()=>say([cur.n+" looks calm and happy. Choose MERCY > Release kindly."],mainMenu):dodge)}
+function win(){
+ cur.done=1;xp+=20;beep(660);const m=cur;cur=null;const lines=[m.end,"+20 XP"];
+ while(lv<5&&xp>=lv*20){lv++;mhp+=4;hp=mhp;pts++;lines.push("LEVEL UP! You are LV "+lv+". Max hull "+mhp+"!")}
+ say(lines,lvUp)}
+function lvUp(){if(!pts)return mode="walk";pick(["Empathy "+ST.EMP+" > "+(ST.EMP+1)+" (calm faster)","Logic "+ST.LOG+" > "+(ST.LOG+1)+" (better clues)","Tech "+ST.TEC+" > "+(ST.TEC+1)+" (faster ship)"],i=>{ST[["EMP","LOG","TEC"][i]]++;pts--;beep(900);lvUp()},null,"Choose a skill to improve:")}
+function dodge(){mode="dodge";t=0;sp=0;hz=[];PS={x:bx+bw/2,y:by+bh/2}}
+function enterCh(){loadCh();mode="walk";DLG[ch]()}
+function term(){say([TERM.q+(ST.LOG>=3?" (LOG hint: "+TERM.h+")":"")],()=>{const o=TERM.o,opts=o.concat(ST.TEC>=3?["[TEC 3] Hack the lock"]:[],["Leave"]);
+ pick(opts,i=>{if(i==opts.length-1)return mode="walk";
+  if((ST.TEC>=3&&i==o.length)||i==TERM.a){TERM.done=1;beep(880);return say(["Access granted!"],()=>mode="walk")}
+  hp-=3;beep(150,.2,"square");if(hp<=0){hp=mhp;return say(["Sparks fly! Your hull gave out. Patched up."],()=>mode="walk")}
+  say(["Wrong. The terminal zaps you. (-3 hull)"],term)},()=>{mode="walk"},"Choose:")})}
+function finale(){
+ say(["The last door opens. Stars glitter beyond the hull.","Behind you, every creature watches, calm and curious."],()=>
+  pick(["Invite them aboard","Send them home"],i=>say([i==0?"The ship gets crowded, loud and warm. Glim hums, Orbi dozes, Zork snacks.":"You wave as they drift into the glittering dark, free and happy.",kind>=3?"Ori lights the whole station gold. STATION RESTORED!":"The station hums quietly again.","You never fought anyone. You listened. THE END."],()=>{mode="end"}),null,"What do you do?"))}
+
+function upd(dt){
+ if(mode=="title"){if(OK()){mode="walk";DLG[0]()}return}
+ if(mode=="end"){if(OK())reset();return}
+ if(mode=="text"){if(OK()){q.shift();beep(500,.04);if(!q.length){mode=prev;if(after){const f=after;after=null;f()}}}return}
+ if(mode=="menu"){
+  if(press("ArrowDown")||press("s"))L.i=(L.i+1)%L.items.length;
+  if(press("ArrowUp")||press("w"))L.i=(L.i+L.items.length-1)%L.items.length;
+  if(OK()){beep(600,.05);L.cb(L.i)}else if(BACK()&&L.back)L.back();return}
+ if(mode=="walk"){
+  const s=130*dt;
+  if(K.ArrowLeft||K.a)P.x-=s;if(K.ArrowRight||K.d)P.x+=s;if(K.ArrowUp||K.w)P.y-=s;if(K.ArrowDown||K.s)P.y+=s;
+  P.x=Math.max(20,Math.min(W-14,P.x));P.y=Math.max(60,Math.min(H-30,P.y));
+  for(const m of MON)if(!m.done&&Math.hypot(m.x-P.x,m.y-P.y)<34){P.x=Math.max(30,P.x-50);return startEnc(m)}
+  if(TERM&&!TERM.done&&Math.hypot(TERM.x-P.x,TERM.y-P.y)<34){P.x=Math.max(30,P.x-50);return term()}
+  if(P.x>600&&P.y>150&&P.y<250){
+   if(!MON.every(m=>m.done)||(TERM&&!TERM.done)){P.x=570;return say(["The door is sealed.","Calm every creature"+(TERM&&!TERM.done?" and unlock the terminal":"")+" to continue."])}
+   if(ch>=2)return finale();
+   return say(["Chapter cleared! Hull restored, +1 snack.","Next: "+CH[ch+1].n],()=>{ch++;snacks++;enterCh()})}
+  return}
+ if(mode=="dodge"){
+  t+=dt;inv-=dt;const s=(130+15*ST.TEC)*dt;
+  if(K.ArrowLeft||K.a)PS.x-=s;if(K.ArrowRight||K.d)PS.x+=s;if(K.ArrowUp||K.w)PS.y-=s;if(K.ArrowDown||K.s)PS.y+=s;
+  PS.x=Math.max(bx+6,Math.min(bx+bw-6,PS.x));PS.y=Math.max(by+6,Math.min(by+bh-6,PS.y));
+  const p=PAT[cur.pat];sp-=dt;if(sp<=0){sp=p.ev;hz.push(p.f())}
+  for(const h of hz){h.x+=h.vx*dt;h.y+=h.vy*dt;
+   if(h.b){if(h.x<bx+h.r||h.x>bx+bw-h.r)h.vx*=-1;if(h.y<by+h.r||h.y>by+bh-h.r)h.vy*=-1}
+   if(inv<=0&&Math.hypot(h.x-PS.x,h.y-PS.y)<h.r+5){hp-=3;inv=1;beep(150,.2,"square");flash=.2}}
+  hz=hz.filter(h=>h.b||(h.x>bx-20&&h.x<bx+bw+20&&h.y>by-20&&h.y<by+bh+20));
+  if(hp<=0){hp=mhp;hz=[];return say(["Your hull gave out! Emergency pods patched you up."],mainMenu)}
+  if(t>5)mainMenu()}}
+
+function tx(s,x,y,w,lh=20){let l="";for(const a of s.split(" ")){if(X.measureText(l+a).width>w){X.fillText(l,x,y);y+=lh;l=""}l+=a+" "}X.fillText(l,x,y)}
+function bar(x,y,w,v,c){X.strokeStyle="#fff";X.lineWidth=1;X.strokeRect(x,y,w,12);X.fillStyle=c;X.fillRect(x+1,y+1,Math.max(0,(w-2)*v),10)}
+function crt(m,x,y,r,happy){X.fillStyle=happy?"#6f6":m.col;X.beginPath();X.arc(x,y,r,0,7);X.fill();
+ X.fillStyle="#001";X.beginPath();X.arc(x-r/3,y-r/5,r/7,0,7);X.arc(x+r/3,y-r/5,r/7,0,7);X.fill();
+ X.strokeStyle="#001";X.lineWidth=2;X.beginPath();
+ if(happy)X.arc(x,y+r/6,r/3,.1*Math.PI,.9*Math.PI);else X.arc(x,y+r/2,r/3,1.1*Math.PI,1.9*Math.PI);X.stroke()}
+function ship(x,y){X.fillStyle="#6cf";X.beginPath();X.moveTo(x,y-9);X.lineTo(x+8,y+8);X.lineTo(x,y+4);X.lineTo(x-8,y+8);X.fill()}
+function draw(){
+ X.fillStyle=CH[ch].c;X.fillRect(0,0,W,H);X.font="16px monospace";X.textAlign="left";X.textBaseline="alphabetic";
+ if(mode=="title"){X.fillStyle="#ffd54a";X.font="bold 44px monospace";X.textAlign="center";X.fillText("HOLLOW ORBIT",W/2,130);
+  X.font="16px monospace";X.fillStyle="#fff";X.fillText("A no-combat deep-space puzzle RPG",W/2,172);
+  X.fillText("Three chapters. Listen to stranded creatures, solve puzzles,",W/2,202);
+  X.fillText("level up your skills, and restart the station's air pumps.",W/2,224);
+  X.fillStyle="#ffd54a";X.fillText("Press Z / Enter or OK to begin",W/2,300);return}
+ if(mode=="end"){X.fillStyle="#ffd54a";X.font="bold 36px monospace";X.textAlign="center";X.fillText("THE END",W/2,120);
+  X.font="16px monospace";X.fillStyle="#fff";X.fillText("LV "+lv+" · "+xp+" XP · EMP "+ST.EMP+" LOG "+ST.LOG+" TEC "+ST.TEC,W/2,170);
+  X.fillText("All creatures calmed. Zero battles.",W/2,200);X.fillText("Press Z / Enter to play again",W/2,260);return}
+ const inEnc=!!cur;
+ if(!inEnc){
+  X.strokeStyle="#2a3a80";X.lineWidth=4;X.strokeRect(10,50,W-20,H-60);
+  const open=MON.every(m=>m.done)&&(!TERM||TERM.done);
+  X.fillStyle=open?"#5f8":"#a44";X.fillRect(W-14,150,8,100);
+  if(TERM){X.fillStyle=TERM.done?"#5f8":"#ffd54a";X.fillRect(TERM.x-12,TERM.y-12,24,24);X.fillStyle="#001";X.textAlign="center";X.fillText(TERM.done?"✓":"?",TERM.x,TERM.y+6);X.textAlign="left"}
+  for(const m of MON)crt(m,m.x,m.y,18,m.done);
+  ship(P.x,P.y);
+  X.fillStyle="#fff";X.font="14px monospace";X.fillText("Ch"+(ch+1)+": "+CH[ch].n+"  ·  LV "+lv+"  Hull "+hp+"/"+mhp+"  Snacks "+snacks,14,22);
+  X.fillText("EMP "+ST.EMP+"  LOG "+ST.LOG+"  TEC "+ST.TEC+"  ·  Calmed "+MON.filter(m=>m.done).length+"/"+MON.length,14,40);X.font="16px monospace";
+ }else{
+  crt(cur,W/2,85,42,calm>=50);
+  X.fillStyle="#fff";X.fillText(cur.n+"   CALM",20,372);bar(130,361,200,calm/100,"#6f6");
+  X.fillText("LV "+lv+"  HULL "+hp+"/"+mhp,350,372);bar(500,361,120,hp/mhp,flash>0?"#f66":"#6cf");
+ }
+ if(mode=="dodge"){X.strokeStyle="#9bf";X.lineWidth=3;X.strokeRect(bx,by,bw,bh);
+  X.fillStyle=cur.col;for(const h of hz){X.beginPath();X.arc(h.x,h.y,h.r,0,7);X.fill()}
+  if(inv<=0||Math.floor(t*12)%2)ship(PS.x,PS.y)}
+ if(mode=="menu"||mode=="text"){const r=inEnc?[20,165,600,170]:[20,235,600,135];
+  X.fillStyle="#000d";X.fillRect(...r);X.strokeStyle="#9bf";X.lineWidth=3;X.strokeRect(...r);X.fillStyle="#fff";X.font="15px monospace";
+  if(mode=="text")tx(q[0]||"",r[0]+16,r[1]+28,r[2]-32,19);
+  else{let y=r[1]+26;if(L.prompt){X.fillText(L.prompt,r[0]+16,y);y+=22}
+   L.items.forEach((s,i)=>{X.fillStyle=i==L.i?"#ffd54a":"#fff";X.fillText((i==L.i?"> ":"  ")+s,r[0]+20,y+i*22)})}
+  X.font="16px monospace"}
+ flash-=1/60}
+let last=performance.now();
+(function loop(n){const dt=Math.min((n-last)/1000,.05);last=n;upd(dt);draw();for(const k in hit)hit[k]=0;requestAnimationFrame(loop)})(last);
+</script></body></html>
